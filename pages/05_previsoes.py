@@ -3,132 +3,129 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
+from sklearn.linear_model import LinearRegression
 import database as db
+from style import RECEITA_COR, LUCRO_COR, DESPESA_COR
 
-st.title("🔮 Previsões de Faturamento e Lucro")
+st.title("Previsões")
 
 historico = db.get_historico_mensal(meses=24)
 
 if len(historico) < 3:
     st.warning(
-        f"São necessários pelo menos **3 meses** de dados para gerar previsões. "
-        f"Atualmente você tem **{len(historico)} mês(es)** de dados.\n\n"
-        "Continue registrando seus aluguéis e despesas para desbloquear esta funcionalidade!"
+        f"São necessários pelo menos **3 meses** de dados para gerar previsões.  \n"
+        f"Atualmente: **{len(historico)} mês(es)** registrado(s)."
     )
     st.stop()
 
 df = pd.DataFrame(historico)
 df["mes_num"] = range(len(df))
-
-# --- Regressão Linear para Receita ---
-from sklearn.linear_model import LinearRegression
-
 X = df["mes_num"].values.reshape(-1, 1)
 
-# Previsão de receita
-modelo_receita = LinearRegression()
-modelo_receita.fit(X, df["receita"].values)
+# ---------------------------------------------------------------------------
+# Modelos
+# ---------------------------------------------------------------------------
+modelo_receita = LinearRegression().fit(X, df["receita"].values)
+modelo_despesa = LinearRegression().fit(X, df["despesas"].values)
 
-# Previsão de despesas
-modelo_despesa = LinearRegression()
-modelo_despesa.fit(X, df["despesas"].values)
+MESES_FUTUROS = 3
+ultimo_idx = df["mes_num"].iloc[-1]
+X_futuro = np.array([[ultimo_idx + i + 1] for i in range(MESES_FUTUROS)])
 
-# Gerar previsões para os próximos 3 meses
-meses_futuros = 3
-ultimo_mes_num = df["mes_num"].iloc[-1]
-X_futuro = np.array([[ultimo_mes_num + i + 1] for i in range(meses_futuros)])
+receita_prev = modelo_receita.predict(X_futuro)
+despesa_prev = modelo_despesa.predict(X_futuro)
+lucro_prev = receita_prev - despesa_prev
 
-receita_prevista = modelo_receita.predict(X_futuro)
-despesa_prevista = modelo_despesa.predict(X_futuro)
-lucro_previsto = receita_prevista - despesa_prevista
-
-# Gerar labels dos meses futuros
+# Labels dos meses futuros
 ultimo_mes = datetime.strptime(df["mes"].iloc[-1], "%Y-%m")
 meses_labels = []
-for i in range(1, meses_futuros + 1):
-    mes = ultimo_mes.month + i
-    ano = ultimo_mes.year
-    while mes > 12:
-        mes -= 12
-        ano += 1
-    meses_labels.append(f"{ano:04d}-{mes:02d}")
+for i in range(1, MESES_FUTUROS + 1):
+    m = ultimo_mes.month + i
+    a = ultimo_mes.year
+    while m > 12:
+        m -= 12
+        a += 1
+    meses_labels.append(f"{a:04d}-{m:02d}")
 
-# --- KPIs de Previsão ---
-st.subheader("Previsão para os Próximos 3 Meses")
+# ---------------------------------------------------------------------------
+# KPIs de Previsão
+# ---------------------------------------------------------------------------
+st.subheader("Previsão — Próximos 3 Meses")
 
 for i, label in enumerate(meses_labels):
-    col1, col2, col3 = st.columns(3)
-    col1.metric(f"Receita ({label})", f"R$ {max(0, receita_prevista[i]):.2f}")
-    col2.metric(f"Despesas ({label})", f"R$ {max(0, despesa_prevista[i]):.2f}")
-    col3.metric(f"Lucro ({label})", f"R$ {lucro_previsto[i]:.2f}")
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"Receita ({label})", f"R$ {max(0, receita_prev[i]):,.2f}")
+    c2.metric(f"Despesas ({label})", f"R$ {max(0, despesa_prev[i]):,.2f}")
+    c3.metric(f"Lucro ({label})", f"R$ {lucro_prev[i]:,.2f}")
 
 st.divider()
 
-# --- Tendência ---
-tendencia_receita = modelo_receita.coef_[0]
-if tendencia_receita > 0:
-    st.success(f"📈 Tendência de **crescimento** na receita: +R$ {tendencia_receita:.2f}/mês")
-elif tendencia_receita < 0:
-    st.error(f"📉 Tendência de **queda** na receita: R$ {tendencia_receita:.2f}/mês")
+# ---------------------------------------------------------------------------
+# Tendência
+# ---------------------------------------------------------------------------
+tendencia = modelo_receita.coef_[0]
+if tendencia > 0:
+    st.success(f":material/trending_up: Tendência de **crescimento** na receita: +R$ {tendencia:,.2f}/mês")
+elif tendencia < 0:
+    st.error(f":material/trending_down: Tendência de **queda** na receita: R$ {tendencia:,.2f}/mês")
 else:
-    st.info("➡️ Receita estável")
+    st.info(":material/trending_flat: Receita estável")
 
 st.divider()
 
-# --- Gráfico Histórico + Previsão ---
-st.subheader("Gráfico: Histórico + Previsão")
-
-todos_meses = list(df["mes"]) + meses_labels
-receita_total = list(df["receita"]) + [max(0, v) for v in receita_prevista]
-despesa_total = list(df["despesas"]) + [max(0, v) for v in despesa_prevista]
-lucro_total = list(df["lucro"]) + list(lucro_previsto)
+# ---------------------------------------------------------------------------
+# Gráfico Histórico + Previsão
+# ---------------------------------------------------------------------------
+st.subheader("Histórico + Previsão")
 
 fig = go.Figure()
 
-# Histórico
+# Dados reais
 fig.add_trace(go.Scatter(
     x=list(df["mes"]), y=list(df["receita"]),
     mode="lines+markers", name="Receita (real)",
-    line=dict(color="#2ecc71", width=3),
+    line=dict(color=RECEITA_COR, width=3),
 ))
 fig.add_trace(go.Scatter(
     x=list(df["mes"]), y=list(df["lucro"]),
     mode="lines+markers", name="Lucro (real)",
-    line=dict(color="#3498db", width=3),
+    line=dict(color=LUCRO_COR, width=3),
+))
+
+# Conexão real → previsão
+fig.add_trace(go.Scatter(
+    x=[df["mes"].iloc[-1], meses_labels[0]],
+    y=[df["receita"].iloc[-1], max(0, receita_prev[0])],
+    mode="lines", showlegend=False,
+    line=dict(color=RECEITA_COR, width=1, dash="dot"),
+))
+fig.add_trace(go.Scatter(
+    x=[df["mes"].iloc[-1], meses_labels[0]],
+    y=[df["lucro"].iloc[-1], lucro_prev[0]],
+    mode="lines", showlegend=False,
+    line=dict(color=LUCRO_COR, width=1, dash="dot"),
 ))
 
 # Previsão
 fig.add_trace(go.Scatter(
-    x=meses_labels, y=[max(0, v) for v in receita_prevista],
+    x=meses_labels, y=[max(0, v) for v in receita_prev],
     mode="lines+markers", name="Receita (previsão)",
-    line=dict(color="#2ecc71", width=2, dash="dash"),
+    line=dict(color=RECEITA_COR, width=2, dash="dash"),
 ))
 fig.add_trace(go.Scatter(
-    x=meses_labels, y=list(lucro_previsto),
+    x=meses_labels, y=list(lucro_prev),
     mode="lines+markers", name="Lucro (previsão)",
-    line=dict(color="#3498db", width=2, dash="dash"),
+    line=dict(color=LUCRO_COR, width=2, dash="dash"),
 ))
 
-# Linha de conexão entre real e previsão
-fig.add_trace(go.Scatter(
-    x=[df["mes"].iloc[-1], meses_labels[0]],
-    y=[df["receita"].iloc[-1], max(0, receita_prevista[0])],
-    mode="lines", showlegend=False,
-    line=dict(color="#2ecc71", width=1, dash="dot"),
-))
-fig.add_trace(go.Scatter(
-    x=[df["mes"].iloc[-1], meses_labels[0]],
-    y=[df["lucro"].iloc[-1], lucro_previsto[0]],
-    mode="lines", showlegend=False,
-    line=dict(color="#3498db", width=1, dash="dot"),
-))
-
-fig.add_hline(y=0, line_dash="dash", line_color="red", opacity=0.3)
+fig.add_hline(y=0, line_dash="dash", line_color=DESPESA_COR, opacity=0.3)
 fig.update_layout(
     xaxis_title="Mês", yaxis_title="R$", height=500,
     legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+    font=dict(color="#14375A"),
 )
 st.plotly_chart(fig, use_container_width=True)
 
-st.caption("⚠️ Previsões baseadas em regressão linear simples sobre dados históricos. "
-           "Quanto mais dados, mais precisas serão as previsões.")
+st.caption("Previsões baseadas em regressão linear sobre dados históricos. "
+           "Quanto mais dados, mais precisas as projeções.")

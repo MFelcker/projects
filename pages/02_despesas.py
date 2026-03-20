@@ -2,19 +2,13 @@ import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 import database as db
+from style import CATEGORIAS
 
-st.title("💸 Despesas")
+st.title("Despesas")
 
-CATEGORIAS = {
-    "produto": "Produto de limpeza",
-    "parcela_maquina": "Parcela da máquina",
-    "manutencao": "Manutenção",
-    "marketing": "Marketing / Tráfego",
-    "suprimentos": "Suprimentos",
-    "outros": "Outros",
-}
-
-# --- Nova Despesa ---
+# ---------------------------------------------------------------------------
+# Registrar Despesa
+# ---------------------------------------------------------------------------
 st.subheader("Registrar Despesa")
 
 maquinas = db.listar_maquinas()
@@ -38,26 +32,26 @@ with st.form("form_despesa", clear_on_submit=True):
 
     descricao = st.text_input("Descrição")
 
-    submitted = st.form_submit_button("Registrar Despesa", type="primary", use_container_width=True)
-
-    if submitted:
+    if st.form_submit_button("Registrar Despesa", type="primary", use_container_width=True):
         db.registrar_despesa(
-            data_despesa.isoformat(), categoria, descricao,
+            data_despesa.isoformat(), categoria, descricao.strip(),
             valor, maquina_opcoes[maquina_sel],
         )
-        st.success(f"Despesa de R$ {valor:.2f} registrada!")
+        st.success(f"Despesa de R$ {valor:,.2f} registrada!")
         st.rerun()
 
 st.divider()
 
-# --- Lista de Despesas ---
+# ---------------------------------------------------------------------------
+# Histórico
+# ---------------------------------------------------------------------------
 st.subheader("Histórico de Despesas")
 
 col_f1, col_f2, col_f3 = st.columns(3)
 with col_f1:
-    filtro_data_ini = st.date_input("De", value=date.today() - timedelta(days=30), key="desp_ini")
+    filtro_data_ini = st.date_input("De", value=date.today() - timedelta(days=60), key="d_ini")
 with col_f2:
-    filtro_data_fim = st.date_input("Até", value=date.today(), key="desp_fim")
+    filtro_data_fim = st.date_input("Até", value=date.today(), key="d_fim")
 with col_f3:
     filtro_cat = st.selectbox(
         "Categoria",
@@ -74,21 +68,17 @@ despesas = db.listar_despesas(
 
 if despesas:
     total = sum(d["valor"] for d in despesas)
-    st.metric("Total no período", f"R$ {total:.2f}")
+    st.metric("Total no período", f"R$ {total:,.2f}")
 
     df = pd.DataFrame(despesas)
-    df["categoria"] = df["categoria"].map(CATEGORIAS)
+    df["categoria"] = df["categoria"].map(CATEGORIAS).fillna(df["categoria"])
     df = df.rename(columns={
-        "data": "Data",
-        "categoria": "Categoria",
-        "descricao": "Descrição",
-        "valor": "Valor (R$)",
-        "maquina_nome": "Máquina",
+        "data": "Data", "categoria": "Categoria", "descricao": "Descrição",
+        "valor": "Valor (R$)", "maquina_nome": "Máquina",
     })
     st.dataframe(
         df[["Data", "Categoria", "Descrição", "Valor (R$)", "Máquina"]],
-        use_container_width=True,
-        hide_index=True,
+        use_container_width=True, hide_index=True,
     )
 
     # Totais por categoria
@@ -97,8 +87,12 @@ if despesas:
         filtro_data_ini.isoformat(), filtro_data_fim.isoformat(),
     )
     if cat_totals:
-        cols = st.columns(len(cat_totals))
-        for i, ct in enumerate(cat_totals):
-            cols[i].metric(CATEGORIAS.get(ct["categoria"], ct["categoria"]), f"R$ {ct['total']:.2f}")
+        n = min(len(cat_totals), 6)
+        cols = st.columns(n)
+        for i, ct in enumerate(cat_totals[:n]):
+            cols[i].metric(
+                CATEGORIAS.get(ct["categoria"], ct["categoria"]),
+                f"R$ {ct['total']:,.2f}",
+            )
 else:
     st.info("Nenhuma despesa encontrada no período.")

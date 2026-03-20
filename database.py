@@ -15,9 +15,7 @@ def get_connection():
 
 def init_db():
     conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.executescript("""
+    conn.executescript("""
         CREATE TABLE IF NOT EXISTS maquinas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
@@ -88,12 +86,13 @@ def init_db():
             FOREIGN KEY (peca_id) REFERENCES pecas(id)
         );
     """)
-
     conn.commit()
     conn.close()
 
 
-# --- Máquinas ---
+# ==========================================================================
+# Máquinas
+# ==========================================================================
 
 def listar_maquinas():
     conn = get_connection()
@@ -114,18 +113,19 @@ def adicionar_maquina(nome, data_compra=None, valor_total=0, parcelas_total=0,
     conn.close()
 
 
-# --- Aluguéis ---
+# ==========================================================================
+# Aluguéis
+# ==========================================================================
 
 def registrar_aluguel(maquina_id, cliente_nome, cliente_telefone, data_inicio,
                       dias, produto_extra_qtd, observacoes="", valor_custom=None):
     valor = valor_custom if valor_custom is not None else (80.0 if dias == 1 else 120.0)
     valor_produto_extra = produto_extra_qtd * 15.0
     valor_total = valor + valor_produto_extra
-    qtd_produto_saida = 1 + produto_extra_qtd  # 1 incluso + extras
+    qtd_produto_saida = 1 + produto_extra_qtd
 
     conn = get_connection()
     cursor = conn.cursor()
-
     cursor.execute(
         """INSERT INTO alugueis (maquina_id, cliente_nome, cliente_telefone,
            data_inicio, dias, valor, produto_extra_qtd, valor_produto_extra,
@@ -135,14 +135,12 @@ def registrar_aluguel(maquina_id, cliente_nome, cliente_telefone, data_inicio,
          valor, produto_extra_qtd, valor_produto_extra, valor_total, observacoes),
     )
     aluguel_id = cursor.lastrowid
-
     cursor.execute(
         """INSERT INTO estoque_movimentacao (data, tipo, quantidade, aluguel_id, observacoes)
            VALUES (?, 'saida', ?, ?, ?)""",
         (datetime.now().isoformat(), qtd_produto_saida, aluguel_id,
          f"Aluguel #{aluguel_id} - {cliente_nome}"),
     )
-
     conn.commit()
     conn.close()
     return aluguel_id
@@ -162,7 +160,7 @@ def listar_alugueis(status=None, data_inicio=None, data_fim=None):
     if data_fim:
         query += " AND a.data_inicio <= ?"
         params.append(data_fim)
-    query += " ORDER BY a.data_inicio DESC"
+    query += " ORDER BY a.data_inicio DESC, a.id DESC"
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -170,14 +168,19 @@ def listar_alugueis(status=None, data_inicio=None, data_fim=None):
 
 def finalizar_aluguel(aluguel_id):
     conn = get_connection()
-    conn.execute("UPDATE alugueis SET status = 'finalizado' WHERE id = ?", (aluguel_id,))
+    conn.execute(
+        "UPDATE alugueis SET status = 'finalizado' WHERE id = ? AND status = 'ativo'",
+        (aluguel_id,),
+    )
     conn.commit()
     conn.close()
 
 
 def cancelar_aluguel(aluguel_id):
     conn = get_connection()
-    aluguel = conn.execute("SELECT * FROM alugueis WHERE id = ?", (aluguel_id,)).fetchone()
+    aluguel = conn.execute(
+        "SELECT * FROM alugueis WHERE id = ? AND status = 'ativo'", (aluguel_id,),
+    ).fetchone()
     if aluguel:
         qtd_devolver = 1 + aluguel["produto_extra_qtd"]
         conn.execute("UPDATE alugueis SET status = 'cancelado' WHERE id = ?", (aluguel_id,))
@@ -191,36 +194,37 @@ def cancelar_aluguel(aluguel_id):
     conn.close()
 
 
-# --- Estoque ---
+# ==========================================================================
+# Estoque
+# ==========================================================================
 
 def get_estoque_atual():
     conn = get_connection()
     row = conn.execute("""
         SELECT COALESCE(
-            (SELECT SUM(CASE WHEN tipo='entrada' THEN quantidade ELSE -quantidade END)
-             FROM estoque_movimentacao), 0
-        ) as total
+            SUM(CASE WHEN tipo='entrada' THEN quantidade ELSE -quantidade END), 0
+        ) as total FROM estoque_movimentacao
     """).fetchone()
     conn.close()
     return row["total"]
 
 
-def registrar_compra_produto(quantidade_litros=5):
-    unidades = quantidade_litros * 2  # 500ml cada
-    custo = (quantidade_litros / 5) * 90.0  # R$90 por 5L
+def registrar_compra_produto(quantidade_litros=5.0):
+    unidades = round(quantidade_litros * 2)
+    custo = (quantidade_litros / 5) * 90.0
 
     conn = get_connection()
     conn.execute(
         """INSERT INTO estoque_movimentacao (data, tipo, quantidade, custo_total, observacoes)
            VALUES (?, 'entrada', ?, ?, ?)""",
         (datetime.now().isoformat(), unidades, custo,
-         f"Compra de {quantidade_litros}L de produto"),
+         f"Compra de {quantidade_litros:.1f}L de produto"),
     )
     conn.execute(
         """INSERT INTO despesas (data, categoria, descricao, valor)
            VALUES (?, 'produto', ?, ?)""",
         (datetime.now().strftime("%Y-%m-%d"),
-         f"Compra de {quantidade_litros}L de produto de limpeza", custo),
+         f"Compra de {quantidade_litros:.1f}L de produto de limpeza", custo),
     )
     conn.commit()
     conn.close()
@@ -229,13 +233,15 @@ def registrar_compra_produto(quantidade_litros=5):
 def listar_movimentacoes_estoque(limite=50):
     conn = get_connection()
     rows = conn.execute(
-        "SELECT * FROM estoque_movimentacao ORDER BY data DESC LIMIT ?", (limite,)
+        "SELECT * FROM estoque_movimentacao ORDER BY data DESC LIMIT ?", (limite,),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-# --- Despesas ---
+# ==========================================================================
+# Despesas
+# ==========================================================================
 
 def registrar_despesa(data, categoria, descricao, valor, maquina_id=None):
     conn = get_connection()
@@ -250,7 +256,9 @@ def registrar_despesa(data, categoria, descricao, valor, maquina_id=None):
 
 def listar_despesas(data_inicio=None, data_fim=None, categoria=None):
     conn = get_connection()
-    query = "SELECT d.*, m.nome as maquina_nome FROM despesas d LEFT JOIN maquinas m ON d.maquina_id = m.id WHERE 1=1"
+    query = """SELECT d.*, m.nome as maquina_nome
+               FROM despesas d LEFT JOIN maquinas m ON d.maquina_id = m.id
+               WHERE 1=1"""
     params = []
     if data_inicio:
         query += " AND d.data >= ?"
@@ -261,17 +269,20 @@ def listar_despesas(data_inicio=None, data_fim=None, categoria=None):
     if categoria:
         query += " AND d.categoria = ?"
         params.append(categoria)
-    query += " ORDER BY d.data DESC"
+    query += " ORDER BY d.data DESC, d.id DESC"
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-# --- Peças / Manutenção ---
+# ==========================================================================
+# Peças / Manutenção
+# ==========================================================================
 
 def listar_pecas(maquina_id=None):
     conn = get_connection()
-    query = "SELECT p.*, m.nome as maquina_nome FROM pecas p JOIN maquinas m ON p.maquina_id = m.id"
+    query = """SELECT p.*, m.nome as maquina_nome
+               FROM pecas p JOIN maquinas m ON p.maquina_id = m.id"""
     params = []
     if maquina_id:
         query += " WHERE p.maquina_id = ?"
@@ -334,7 +345,7 @@ def get_status_peca(peca):
     data_inst = datetime.strptime(peca["data_instalacao"], "%Y-%m-%d")
     dias_usados = (datetime.now() - data_inst).days
     vida_util = peca["vida_util_dias"]
-    percentual = (dias_usados / vida_util) * 100 if vida_util > 0 else 100
+    percentual = (dias_usados / vida_util * 100) if vida_util > 0 else 100
 
     if percentual >= 100:
         status = "vencida"
@@ -352,51 +363,45 @@ def get_status_peca(peca):
     }
 
 
-# --- Dashboard / Relatórios ---
+# ==========================================================================
+# Dashboard / Relatórios
+# ==========================================================================
 
 def get_resumo_mensal(ano=None, mes=None):
+    """Retorna KPIs de um mês. Sem parâmetros = mês atual."""
     conn = get_connection()
 
     if ano and mes:
-        filtro_data = f"{ano:04d}-{mes:02d}"
-        receita_query = """SELECT COALESCE(SUM(valor_total), 0) as total
-                           FROM alugueis WHERE strftime('%Y-%m', data_inicio) = ?
-                           AND status != 'cancelado'"""
-        despesa_query = """SELECT COALESCE(SUM(valor), 0) as total
-                           FROM despesas WHERE strftime('%Y-%m', data) = ?"""
-        alugueis_query = """SELECT COUNT(*) as total FROM alugueis
-                            WHERE strftime('%Y-%m', data_inicio) = ?
-                            AND status != 'cancelado'"""
-        receita = conn.execute(receita_query, (filtro_data,)).fetchone()["total"]
-        despesas_total = conn.execute(despesa_query, (filtro_data,)).fetchone()["total"]
-        num_alugueis = conn.execute(alugueis_query, (filtro_data,)).fetchone()["total"]
+        filtro = f"{ano:04d}-{mes:02d}"
     else:
-        mes_atual = datetime.now().strftime("%Y-%m")
-        receita = conn.execute(
-            """SELECT COALESCE(SUM(valor_total), 0) as total FROM alugueis
-               WHERE strftime('%Y-%m', data_inicio) = ? AND status != 'cancelado'""",
-            (mes_atual,),
-        ).fetchone()["total"]
-        despesas_total = conn.execute(
-            "SELECT COALESCE(SUM(valor), 0) as total FROM despesas WHERE strftime('%Y-%m', data) = ?",
-            (mes_atual,),
-        ).fetchone()["total"]
-        num_alugueis = conn.execute(
-            """SELECT COUNT(*) as total FROM alugueis
-               WHERE strftime('%Y-%m', data_inicio) = ? AND status != 'cancelado'""",
-            (mes_atual,),
-        ).fetchone()["total"]
+        filtro = datetime.now().strftime("%Y-%m")
+
+    receita = conn.execute(
+        """SELECT COALESCE(SUM(valor_total), 0) as total FROM alugueis
+           WHERE strftime('%Y-%m', data_inicio) = ? AND status != 'cancelado'""",
+        (filtro,),
+    ).fetchone()["total"]
+
+    despesas_total = conn.execute(
+        "SELECT COALESCE(SUM(valor), 0) as total FROM despesas WHERE strftime('%Y-%m', data) = ?",
+        (filtro,),
+    ).fetchone()["total"]
+
+    num_alugueis = conn.execute(
+        """SELECT COUNT(*) as total FROM alugueis
+           WHERE strftime('%Y-%m', data_inicio) = ? AND status != 'cancelado'""",
+        (filtro,),
+    ).fetchone()["total"]
 
     conn.close()
-    lucro = receita - despesas_total
-    ticket_medio = receita / num_alugueis if num_alugueis > 0 else 0
 
+    lucro = receita - despesas_total
     return {
         "receita": receita,
         "despesas": despesas_total,
         "lucro": lucro,
         "num_alugueis": num_alugueis,
-        "ticket_medio": ticket_medio,
+        "ticket_medio": receita / num_alugueis if num_alugueis > 0 else 0,
         "margem": (lucro / receita * 100) if receita > 0 else 0,
     }
 
@@ -407,20 +412,13 @@ def get_historico_mensal(meses=12):
         SELECT strftime('%Y-%m', data_inicio) as mes,
                SUM(valor_total) as receita,
                COUNT(*) as num_alugueis
-        FROM alugueis
-        WHERE status != 'cancelado'
-        GROUP BY mes
-        ORDER BY mes DESC
-        LIMIT ?
+        FROM alugueis WHERE status != 'cancelado'
+        GROUP BY mes ORDER BY mes DESC LIMIT ?
     """, (meses,)).fetchall()
 
     despesas_rows = conn.execute("""
-        SELECT strftime('%Y-%m', data) as mes,
-               SUM(valor) as total
-        FROM despesas
-        GROUP BY mes
-        ORDER BY mes DESC
-        LIMIT ?
+        SELECT strftime('%Y-%m', data) as mes, SUM(valor) as total
+        FROM despesas GROUP BY mes ORDER BY mes DESC LIMIT ?
     """, (meses,)).fetchall()
     conn.close()
 
@@ -437,13 +435,12 @@ def get_historico_mensal(meses=12):
             "lucro": receita - despesa,
             "num_alugueis": r["num_alugueis"],
         })
-
     return resultado
 
 
 def get_despesas_por_categoria(data_inicio=None, data_fim=None):
     conn = get_connection()
-    query = """SELECT categoria, SUM(valor) as total FROM despesas WHERE 1=1"""
+    query = "SELECT categoria, SUM(valor) as total FROM despesas WHERE 1=1"
     params = []
     if data_inicio:
         query += " AND data >= ?"
