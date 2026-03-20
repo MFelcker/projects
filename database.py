@@ -117,8 +117,8 @@ def adicionar_maquina(nome, data_compra=None, valor_total=0, parcelas_total=0,
 # --- Aluguéis ---
 
 def registrar_aluguel(maquina_id, cliente_nome, cliente_telefone, data_inicio,
-                      dias, produto_extra_qtd, observacoes=""):
-    valor = 80.0 if dias == 1 else 120.0
+                      dias, produto_extra_qtd, observacoes="", valor_custom=None):
+    valor = valor_custom if valor_custom is not None else (80.0 if dias == 1 else 120.0)
     valor_produto_extra = produto_extra_qtd * 15.0
     valor_total = valor + valor_produto_extra
     qtd_produto_saida = 1 + produto_extra_qtd  # 1 incluso + extras

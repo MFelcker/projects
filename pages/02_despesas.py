@@ -9,6 +9,8 @@ CATEGORIAS = {
     "produto": "Produto de limpeza",
     "parcela_maquina": "Parcela da máquina",
     "manutencao": "Manutenção",
+    "marketing": "Marketing / Tráfego",
+    "suprimentos": "Suprimentos",
     "outros": "Outros",
 }
 

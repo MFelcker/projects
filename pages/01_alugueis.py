@@ -30,10 +30,19 @@ with st.form("form_aluguel", clear_on_submit=True):
         dias = st.radio("Duração", options=[1, 2], format_func=lambda x: f"{x} dia(s) - R$ {'80' if x == 1 else '120'}", horizontal=True)
         produto_extra = st.number_input("Produto extra (unid. 500ml)", min_value=0, max_value=50, value=0)
 
-    observacoes = st.text_area("Observações", height=68)
+    col_obs, col_preco = st.columns(2)
+    with col_obs:
+        observacoes = st.text_area("Observações", height=68)
+    with col_preco:
+        valor_sugerido = 80.0 if dias == 1 else 120.0
+        valor_personalizado = st.checkbox("Valor personalizado")
+        if valor_personalizado:
+            valor_base = st.number_input("Valor da diária (R$)", min_value=0.0, step=10.0,
+                                         value=valor_sugerido, format="%.2f")
+        else:
+            valor_base = valor_sugerido
 
     # Resumo do valor
-    valor_base = 80.0 if dias == 1 else 120.0
     valor_extra = produto_extra * 15.0
     valor_total = valor_base + valor_extra
 
@@ -59,6 +68,7 @@ with st.form("form_aluguel", clear_on_submit=True):
             aluguel_id = db.registrar_aluguel(
                 maquina_id, cliente_nome, cliente_telefone,
                 data_inicio.isoformat(), dias, produto_extra, observacoes,
+                valor_custom=valor_base if valor_personalizado else None,
             )
             st.success(f"Aluguel #{aluguel_id} registrado com sucesso! Total: R$ {valor_total:.2f}")
             st.rerun()
@@ -77,7 +87,7 @@ col_f1, col_f2, col_f3 = st.columns(3)
 with col_f1:
     filtro_status = st.selectbox("Status", ["Todos", "ativo", "finalizado", "cancelado"])
 with col_f2:
-    filtro_data_ini = st.date_input("De", value=date.today() - timedelta(days=30), key="filtro_ini")
+    filtro_data_ini = st.date_input("De", value=date.today() - timedelta(days=60), key="filtro_ini")
 with col_f3:
     filtro_data_fim = st.date_input("Até", value=date.today(), key="filtro_fim")
 
