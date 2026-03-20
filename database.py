@@ -85,6 +85,20 @@ def init_db():
             observacoes TEXT,
             FOREIGN KEY (peca_id) REFERENCES pecas(id)
         );
+
+        CREATE TABLE IF NOT EXISTS redes_sociais (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data DATE NOT NULL,
+            plataforma TEXT NOT NULL DEFAULT 'instagram',
+            seguidores INTEGER DEFAULT 0,
+            postagens INTEGER DEFAULT 0,
+            curtidas INTEGER DEFAULT 0,
+            comentarios INTEGER DEFAULT 0,
+            alcance INTEGER DEFAULT 0,
+            novos_seguidores INTEGER DEFAULT 0,
+            observacoes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     conn.commit()
     conn.close()
@@ -505,3 +519,60 @@ def get_despesas_por_categoria(data_inicio=None, data_fim=None):
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ==========================================================================
+# Redes Sociais
+# ==========================================================================
+
+def registrar_rede_social(data, plataforma, seguidores, postagens, curtidas,
+                          comentarios, alcance, novos_seguidores, observacoes=""):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO redes_sociais (data, plataforma, seguidores, postagens,
+           curtidas, comentarios, alcance, novos_seguidores, observacoes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (data, plataforma, seguidores, postagens, curtidas, comentarios,
+         alcance, novos_seguidores, observacoes),
+    )
+    conn.commit()
+    conn.close()
+
+
+def listar_redes_sociais(plataforma=None, data_inicio=None, data_fim=None):
+    conn = get_connection()
+    query = "SELECT * FROM redes_sociais WHERE 1=1"
+    params = []
+    if plataforma:
+        query += " AND plataforma = ?"
+        params.append(plataforma)
+    if data_inicio:
+        query += " AND data >= ?"
+        params.append(data_inicio)
+    if data_fim:
+        query += " AND data <= ?"
+        params.append(data_fim)
+    query += " ORDER BY data DESC, id DESC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def atualizar_rede_social(registro_id, data, seguidores, postagens, curtidas,
+                          comentarios, alcance, novos_seguidores, observacoes):
+    conn = get_connection()
+    conn.execute(
+        """UPDATE redes_sociais SET data=?, seguidores=?, postagens=?, curtidas=?,
+           comentarios=?, alcance=?, novos_seguidores=?, observacoes=? WHERE id=?""",
+        (data, seguidores, postagens, curtidas, comentarios, alcance,
+         novos_seguidores, observacoes, registro_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def excluir_rede_social(registro_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM redes_sociais WHERE id=?", (registro_id,))
+    conn.commit()
+    conn.close()

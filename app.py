@@ -26,6 +26,9 @@ pages = st.navigation({
     "Máquinas": [
         st.Page("pages/06_manutencao.py", title="Extratoras", icon=":material/precision_manufacturing:"),
     ],
+    "Marketing": [
+        st.Page("pages/07_redes_sociais.py", title="Redes Sociais", icon=":material/share:"),
+    ],
 })
 
 pages.run()
