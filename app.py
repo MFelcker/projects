@@ -24,7 +24,7 @@ pages = st.navigation({
         st.Page("pages/05_previsoes.py", title="Previsões", icon=":material/trending_up:"),
     ],
     "Máquinas": [
-        st.Page("pages/06_manutencao.py", title="Manutenção", icon=":material/build:"),
+        st.Page("pages/06_manutencao.py", title="Extratoras", icon=":material/precision_manufacturing:"),
     ],
 })
 

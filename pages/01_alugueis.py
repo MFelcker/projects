@@ -8,7 +8,7 @@ st.title("Aluguéis")
 maquinas = db.listar_maquinas()
 
 if not maquinas:
-    st.warning("Nenhuma máquina cadastrada. Vá até a aba **Manutenção** para cadastrar.")
+    st.warning("Nenhuma máquina cadastrada. Vá até a aba **Máquinas** para cadastrar.")
     st.stop()
 
 # ---------------------------------------------------------------------------
@@ -31,30 +31,19 @@ with st.form("form_aluguel", clear_on_submit=True):
 
     with col2:
         data_inicio = st.date_input("Data do aluguel", value=date.today())
-        dias = st.radio(
-            "Duração",
-            options=[1, 2],
-            format_func=lambda x: f"{x} dia(s) — R$ {'80,00' if x == 1 else '120,00'}",
-            horizontal=True,
+        dias = st.number_input("Quantidade de dias", min_value=1, max_value=30, value=1, step=1)
+        valor_base = st.number_input(
+            "Preço cobrado (R$)", min_value=0.0, step=10.0, value=80.0, format="%.2f",
         )
+
+    col_extra, col_obs = st.columns(2)
+    with col_extra:
         produto_extra = st.number_input(
             "Produto extra (unid. 500ml — R$ 15,00 cada)",
             min_value=0, max_value=50, value=0,
         )
-
-    col_obs, col_preco = st.columns(2)
     with col_obs:
         observacoes = st.text_area("Observações", height=68)
-    with col_preco:
-        valor_sugerido = 80.0 if dias == 1 else 120.0
-        valor_personalizado = st.checkbox("Valor personalizado")
-        if valor_personalizado:
-            valor_base = st.number_input(
-                "Valor do aluguel (R$)", min_value=0.0,
-                step=10.0, value=valor_sugerido, format="%.2f",
-            )
-        else:
-            valor_base = valor_sugerido
 
     valor_extra = produto_extra * 15.0
     valor_total = valor_base + valor_extra
@@ -62,7 +51,7 @@ with st.form("form_aluguel", clear_on_submit=True):
     st.info(
         f"**Resumo:** Aluguel R$ {valor_base:,.2f} + "
         f"Produto extra R$ {valor_extra:,.2f} = **R$ {valor_total:,.2f}**  \n"
-        f"*(1 unidade de 500ml inclusa + {produto_extra} extra)*"
+        f"*({dias} dia(s) | 1 unidade de 500ml inclusa + {produto_extra} extra)*"
     )
 
     qtd_necessaria = 1 + produto_extra
@@ -81,7 +70,7 @@ with st.form("form_aluguel", clear_on_submit=True):
                 maquina_opcoes[maquina_sel], cliente_nome.strip(),
                 cliente_telefone.strip(), data_inicio.isoformat(),
                 dias, produto_extra, observacoes.strip(),
-                valor_custom=valor_base if valor_personalizado else None,
+                valor_custom=valor_base,
             )
             st.success(f"Aluguel #{aluguel_id} registrado! Total: R$ {valor_total:,.2f}")
             st.rerun()
@@ -124,6 +113,7 @@ if alugueis:
             if a["observacoes"]:
                 st.caption(f"Obs: {a['observacoes']}")
 
+            # Ações para aluguéis ativos
             if a["status"] == "ativo":
                 bc1, bc2 = st.columns(2)
                 if bc1.button("Finalizar", key=f"fin_{a['id']}", use_container_width=True):
@@ -131,6 +121,51 @@ if alugueis:
                     st.rerun()
                 if bc2.button("Cancelar", key=f"can_{a['id']}", use_container_width=True):
                     db.cancelar_aluguel(a["id"])
+                    st.rerun()
+
+            # Editar aluguel
+            st.markdown("---")
+            st.markdown("**Editar registro**")
+            with st.form(f"edit_aluguel_{a['id']}"):
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    edit_cliente = st.text_input("Cliente", value=a["cliente_nome"], key=f"ac_{a['id']}")
+                    edit_tel = st.text_input("Telefone", value=a["cliente_telefone"] or "", key=f"at_{a['id']}")
+                    edit_data = st.date_input(
+                        "Data",
+                        value=date.fromisoformat(a["data_inicio"]),
+                        key=f"ad_{a['id']}",
+                    )
+                with ec2:
+                    edit_dias = st.number_input(
+                        "Dias", min_value=1, max_value=30,
+                        value=int(a["dias"]), key=f"adi_{a['id']}",
+                    )
+                    edit_valor = st.number_input(
+                        "Preço cobrado (R$)", min_value=0.0, step=10.0,
+                        value=float(a["valor"]), format="%.2f", key=f"av_{a['id']}",
+                    )
+                    edit_extra = st.number_input(
+                        "Produto extra (unid.)", min_value=0, max_value=50,
+                        value=int(a["produto_extra_qtd"]), key=f"ae_{a['id']}",
+                    )
+                edit_obs = st.text_input("Observações", value=a["observacoes"] or "", key=f"ao_{a['id']}")
+
+                fc1, fc2 = st.columns([3, 1])
+                salvar = fc1.form_submit_button("Salvar Alterações", type="primary")
+                excluir = fc2.form_submit_button("Excluir Registro")
+
+                if salvar:
+                    db.atualizar_aluguel(
+                        a["id"], edit_cliente.strip(), edit_tel.strip(),
+                        edit_data.isoformat(), edit_dias, edit_valor,
+                        edit_extra, edit_obs.strip(),
+                    )
+                    st.success("Aluguel atualizado!")
+                    st.rerun()
+                if excluir:
+                    db.excluir_aluguel(a["id"])
+                    st.success("Registro excluído!")
                     st.rerun()
 else:
     st.info("Nenhum aluguel encontrado no período selecionado.")

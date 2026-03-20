@@ -113,6 +113,59 @@ def adicionar_maquina(nome, data_compra=None, valor_total=0, parcelas_total=0,
     conn.close()
 
 
+def atualizar_maquina(maquina_id, nome, data_compra, valor_total, parcelas_total,
+                      valor_parcela, parcelas_pagas):
+    conn = get_connection()
+    conn.execute(
+        """UPDATE maquinas SET nome=?, data_compra=?, valor_total=?, parcelas_total=?,
+           valor_parcela=?, parcelas_pagas=? WHERE id=?""",
+        (nome, data_compra, valor_total, parcelas_total, valor_parcela, parcelas_pagas, maquina_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def atualizar_aluguel(aluguel_id, cliente_nome, cliente_telefone, data_inicio,
+                      dias, valor, produto_extra_qtd, observacoes):
+    valor_produto_extra = produto_extra_qtd * 15.0
+    valor_total = valor + valor_produto_extra
+    conn = get_connection()
+    conn.execute(
+        """UPDATE alugueis SET cliente_nome=?, cliente_telefone=?, data_inicio=?,
+           dias=?, valor=?, produto_extra_qtd=?, valor_produto_extra=?,
+           valor_total=?, observacoes=? WHERE id=?""",
+        (cliente_nome, cliente_telefone, data_inicio, dias, valor,
+         produto_extra_qtd, valor_produto_extra, valor_total, observacoes, aluguel_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def atualizar_despesa(despesa_id, data, categoria, descricao, valor):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE despesas SET data=?, categoria=?, descricao=?, valor=? WHERE id=?",
+        (data, categoria, descricao, valor, despesa_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def excluir_despesa(despesa_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM despesas WHERE id=?", (despesa_id,))
+    conn.commit()
+    conn.close()
+
+
+def excluir_aluguel(aluguel_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM estoque_movimentacao WHERE aluguel_id=?", (aluguel_id,))
+    conn.execute("DELETE FROM alugueis WHERE id=?", (aluguel_id,))
+    conn.commit()
+    conn.close()
+
+
 # ==========================================================================
 # Aluguéis
 # ==========================================================================

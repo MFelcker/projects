@@ -70,16 +70,53 @@ if despesas:
     total = sum(d["valor"] for d in despesas)
     st.metric("Total no período", f"R$ {total:,.2f}")
 
-    df = pd.DataFrame(despesas)
-    df["categoria"] = df["categoria"].map(CATEGORIAS).fillna(df["categoria"])
-    df = df.rename(columns={
-        "data": "Data", "categoria": "Categoria", "descricao": "Descrição",
-        "valor": "Valor (R$)", "maquina_nome": "Máquina",
-    })
-    st.dataframe(
-        df[["Data", "Categoria", "Descrição", "Valor (R$)", "Máquina"]],
-        use_container_width=True, hide_index=True,
-    )
+    cat_keys = list(CATEGORIAS.keys())
+    cat_labels = list(CATEGORIAS.values())
+
+    for d in despesas:
+        cat_display = CATEGORIAS.get(d["categoria"], d["categoria"])
+        label = f"R$ {d['valor']:,.2f} — {cat_display} — {d['data']}"
+        if d.get("descricao"):
+            label += f" | {d['descricao']}"
+
+        with st.expander(label):
+            with st.form(f"edit_desp_{d['id']}"):
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    edit_data = st.date_input(
+                        "Data", value=date.fromisoformat(d["data"]), key=f"dd_{d['id']}",
+                    )
+                    cat_idx = cat_keys.index(d["categoria"]) if d["categoria"] in cat_keys else 0
+                    edit_cat = st.selectbox(
+                        "Categoria", options=cat_keys,
+                        index=cat_idx,
+                        format_func=lambda x: CATEGORIAS[x],
+                        key=f"dc_{d['id']}",
+                    )
+                with ec2:
+                    edit_valor = st.number_input(
+                        "Valor (R$)", min_value=0.01, step=0.50,
+                        value=float(d["valor"]), format="%.2f", key=f"dv_{d['id']}",
+                    )
+                    edit_desc = st.text_input(
+                        "Descrição", value=d["descricao"] or "", key=f"de_{d['id']}",
+                    )
+
+                fc1, fc2 = st.columns([3, 1])
+                salvar = fc1.form_submit_button("Salvar Alterações", type="primary")
+                excluir = fc2.form_submit_button("Excluir")
+
+                if salvar:
+                    db.atualizar_despesa(
+                        d["id"], edit_data.isoformat(), edit_cat,
+                        edit_desc.strip(), edit_valor,
+                    )
+                    st.success("Despesa atualizada!")
+                    st.rerun()
+                if excluir:
+                    db.excluir_despesa(d["id"])
+                    st.success("Despesa excluída!")
+                    st.rerun()
 
     # Totais por categoria
     st.subheader("Totais por Categoria")
