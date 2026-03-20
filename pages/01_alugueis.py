@@ -167,5 +167,37 @@ if alugueis:
                     db.excluir_aluguel(a["id"])
                     st.success("Registro excluído!")
                     st.rerun()
+    # Exportar CSV
+    df_export = pd.DataFrame(alugueis)
+    cols_export = ["id", "cliente_nome", "cliente_telefone", "maquina_nome",
+                   "data_inicio", "dias", "valor", "produto_extra_qtd",
+                   "valor_total", "status", "observacoes"]
+    df_csv = df_export[[c for c in cols_export if c in df_export.columns]]
+    csv = df_csv.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        ":material/download: Exportar Aluguéis (CSV)",
+        data=csv, file_name="alugueis.csv", mime="text/csv",
+    )
 else:
     st.info("Nenhum aluguel encontrado no período selecionado.")
+
+# ---------------------------------------------------------------------------
+# Ranking de Clientes
+# ---------------------------------------------------------------------------
+st.divider()
+st.subheader("Ranking de Clientes")
+
+top_clientes = db.get_top_clientes(10)
+if top_clientes:
+    for i, c in enumerate(top_clientes, 1):
+        medal = {1: ":material/trophy:", 2: ":material/military_tech:", 3: ":material/workspace_premium:"}.get(i, "")
+        with st.expander(f"{medal} **{i}. {c['cliente_nome']}** — {c['total_alugueis']} aluguéis | R$ {c['receita_total']:,.2f}"):
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total de Aluguéis", c["total_alugueis"])
+            m2.metric("Receita Total", f"R$ {c['receita_total']:,.2f}")
+            m3.metric("Ticket Médio", f"R$ {c['ticket_medio']:,.2f}")
+            if c.get("cliente_telefone"):
+                st.caption(f"Telefone: {c['cliente_telefone']}")
+            st.caption(f"Último aluguel: {c['ultimo_aluguel']}")
+else:
+    st.info("Nenhum cliente registrado ainda.")

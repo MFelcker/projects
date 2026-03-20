@@ -118,6 +118,18 @@ if despesas:
                     st.success("Despesa excluída!")
                     st.rerun()
 
+    # Exportar CSV
+    df_export = pd.DataFrame(despesas)
+    df_export["categoria"] = df_export["categoria"].map(CATEGORIAS).fillna(df_export["categoria"])
+    cols_csv = ["data", "categoria", "descricao", "valor"]
+    if "maquina_nome" in df_export.columns:
+        cols_csv.append("maquina_nome")
+    csv = df_export[[c for c in cols_csv if c in df_export.columns]].to_csv(index=False).encode("utf-8")
+    st.download_button(
+        ":material/download: Exportar Despesas (CSV)",
+        data=csv, file_name="despesas.csv", mime="text/csv",
+    )
+
     # Totais por categoria
     st.subheader("Totais por Categoria")
     cat_totals = db.get_despesas_por_categoria(

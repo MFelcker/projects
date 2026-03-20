@@ -64,11 +64,20 @@ st.subheader("Movimentações Recentes")
 
 movs = db.listar_movimentacoes_estoque(limite=30)
 if movs:
+    import pandas as pd
     for m in movs:
         icon = ":material/download:" if m["tipo"] == "entrada" else ":material/upload:"
         sinal = "+" if m["tipo"] == "entrada" else "-"
         custo_str = f" | R$ {m['custo_total']:,.2f}" if m["custo_total"] else ""
         obs = m["observacoes"] or ""
         st.markdown(f"{icon} `{m['data'][:16]}` | **{sinal}{m['quantidade']}** unid.{custo_str} | {obs}")
+
+    df_movs = pd.DataFrame(movs)
+    cols_csv = ["data", "tipo", "quantidade", "custo_total", "observacoes"]
+    csv = df_movs[[c for c in cols_csv if c in df_movs.columns]].to_csv(index=False).encode("utf-8")
+    st.download_button(
+        ":material/download: Exportar Movimentações (CSV)",
+        data=csv, file_name="estoque_movimentacoes.csv", mime="text/csv",
+    )
 else:
     st.info("Nenhuma movimentação registrada.")

@@ -14,6 +14,9 @@ db.init_db()
 render_sidebar_brand()
 
 pages = st.navigation({
+    "": [
+        st.Page("pages/00_home.py", title="Visão Geral", icon=":material/home:", default=True),
+    ],
     "Operações": [
         st.Page("pages/01_alugueis.py", title="Aluguéis", icon=":material/assignment:"),
         st.Page("pages/02_despesas.py", title="Despesas", icon=":material/payments:"),

@@ -576,3 +576,96 @@ def excluir_rede_social(registro_id):
     conn.execute("DELETE FROM redes_sociais WHERE id=?", (registro_id,))
     conn.commit()
     conn.close()
+
+
+# ==========================================================================
+# Consultas para Visão Geral / Home
+# ==========================================================================
+
+def get_alugueis_ativos():
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT a.*, m.nome as maquina_nome FROM alugueis a
+           JOIN maquinas m ON a.maquina_id = m.id
+           WHERE a.status = 'ativo' ORDER BY a.data_inicio DESC""",
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_roi_por_maquina():
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT m.id, m.nome, m.valor_total as custo_maquina,
+               m.parcelas_pagas * m.valor_parcela as total_pago,
+               COALESCE(SUM(CASE WHEN a.status != 'cancelado' THEN a.valor_total ELSE 0 END), 0) as receita_gerada,
+               COUNT(CASE WHEN a.status != 'cancelado' THEN 1 END) as total_alugueis,
+               COALESCE(desp.total_despesas, 0) as despesas_associadas
+        FROM maquinas m
+        LEFT JOIN alugueis a ON a.maquina_id = m.id
+        LEFT JOIN (
+            SELECT maquina_id, SUM(valor) as total_despesas
+            FROM despesas WHERE maquina_id IS NOT NULL
+            GROUP BY maquina_id
+        ) desp ON desp.maquina_id = m.id
+        GROUP BY m.id
+        ORDER BY receita_gerada DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_top_clientes(limite=10):
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT cliente_nome,
+               cliente_telefone,
+               COUNT(*) as total_alugueis,
+               SUM(CASE WHEN status != 'cancelado' THEN valor_total ELSE 0 END) as receita_total,
+               MAX(data_inicio) as ultimo_aluguel,
+               ROUND(AVG(CASE WHEN status != 'cancelado' THEN valor_total END), 2) as ticket_medio
+        FROM alugueis
+        GROUP BY LOWER(TRIM(cliente_nome))
+        ORDER BY total_alugueis DESC, receita_total DESC
+        LIMIT ?
+    """, (limite,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_receita_por_maquina_mensal():
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT strftime('%Y-%m', a.data_inicio) as mes,
+               m.nome as maquina,
+               SUM(a.valor_total) as receita
+        FROM alugueis a JOIN maquinas m ON a.maquina_id = m.id
+        WHERE a.status != 'cancelado'
+        GROUP BY mes, m.nome
+        ORDER BY mes
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_dias_semana_populares():
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT
+            CASE CAST(strftime('%w', data_inicio) AS INTEGER)
+                WHEN 0 THEN 'Domingo'
+                WHEN 1 THEN 'Segunda'
+                WHEN 2 THEN 'Terça'
+                WHEN 3 THEN 'Quarta'
+                WHEN 4 THEN 'Quinta'
+                WHEN 5 THEN 'Sexta'
+                WHEN 6 THEN 'Sábado'
+            END as dia_semana,
+            CAST(strftime('%w', data_inicio) AS INTEGER) as dia_num,
+            COUNT(*) as total
+        FROM alugueis WHERE status != 'cancelado'
+        GROUP BY dia_num
+        ORDER BY dia_num
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
